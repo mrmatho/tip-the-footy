@@ -20,6 +20,14 @@ FEATURE_COLS = [
     "away_avg_score_last_5",
     "home_avg_margin_last_5",
     "away_avg_margin_last_5",
+    "home_win_rate_last_3",
+    "away_win_rate_last_3",
+    "home_avg_score_last_3",
+    "away_avg_score_last_3",
+    "home_avg_margin_last_3",
+    "away_avg_margin_last_3",
+    "win_rate_diff",
+    "avg_margin_diff",
     "head_to_head_win_rate",
     "venue_home_win_rate",
     "days_since_last_game_home",
@@ -31,7 +39,8 @@ FEATURE_COLS = [
 TARGET_CLF = "home_win"  # 1 if home team wins, 0 otherwise
 TARGET_REG = "margin"    # home_score − away_score (negative = away win)
 
-_WINDOW = 5  # rolling-window size for recent-form features
+_WINDOW = 5   # rolling-window size for recent-form features
+_WINDOW_SHORT = 3  # shorter rolling window to capture very recent form
 
 
 # ── Private helpers ───────────────────────────────────────────────────────────
@@ -203,6 +212,15 @@ def build_features(df: pd.DataFrame) -> pd.DataFrame:
     tv["_avg_margin"] = _grp["margin"].transform(
         lambda x: x.shift(1).rolling(_WINDOW, min_periods=1).mean()
     )
+    tv["_win_rate_3"]   = _grp["won"].transform(
+        lambda x: x.shift(1).rolling(_WINDOW_SHORT, min_periods=1).mean()
+    )
+    tv["_avg_score_3"]  = _grp["score"].transform(
+        lambda x: x.shift(1).rolling(_WINDOW_SHORT, min_periods=1).mean()
+    )
+    tv["_avg_margin_3"] = _grp["margin"].transform(
+        lambda x: x.shift(1).rolling(_WINDOW_SHORT, min_periods=1).mean()
+    )
     _prev_dt = _grp["date_dt"].transform(lambda x: x.shift(1))
     tv["_days_rest"]  = (tv["date_dt"] - _prev_dt).dt.days
 
@@ -243,18 +261,30 @@ def build_features(df: pd.DataFrame) -> pd.DataFrame:
     for _, row in df.iterrows():
         gid = row["id"]
         ladder = ladder_cache.get((row["season"], row["round"]), {})
+        h_wr5 = home_tv["_win_rate"].get(gid, np.nan)
+        a_wr5 = away_tv["_win_rate"].get(gid, np.nan)
+        h_mg5 = home_tv["_avg_margin"].get(gid, np.nan)
+        a_mg5 = away_tv["_avg_margin"].get(gid, np.nan)
         records.append({
             "match_id": gid,
             "season": row["season"],
             "round": row["round"],
             "home_team": str(row["hteam"]),
             "away_team": str(row["ateam"]),
-            "home_win_rate_last_5":      home_tv["_win_rate"].get(gid, np.nan),
-            "away_win_rate_last_5":      away_tv["_win_rate"].get(gid, np.nan),
+            "home_win_rate_last_5":      h_wr5,
+            "away_win_rate_last_5":      a_wr5,
             "home_avg_score_last_5":     home_tv["_avg_score"].get(gid, np.nan),
             "away_avg_score_last_5":     away_tv["_avg_score"].get(gid, np.nan),
-            "home_avg_margin_last_5":    home_tv["_avg_margin"].get(gid, np.nan),
-            "away_avg_margin_last_5":    away_tv["_avg_margin"].get(gid, np.nan),
+            "home_avg_margin_last_5":    h_mg5,
+            "away_avg_margin_last_5":    a_mg5,
+            "home_win_rate_last_3":      home_tv["_win_rate_3"].get(gid, np.nan),
+            "away_win_rate_last_3":      away_tv["_win_rate_3"].get(gid, np.nan),
+            "home_avg_score_last_3":     home_tv["_avg_score_3"].get(gid, np.nan),
+            "away_avg_score_last_3":     away_tv["_avg_score_3"].get(gid, np.nan),
+            "home_avg_margin_last_3":    home_tv["_avg_margin_3"].get(gid, np.nan),
+            "away_avg_margin_last_3":    away_tv["_avg_margin_3"].get(gid, np.nan),
+            "win_rate_diff":             h_wr5 - a_wr5,
+            "avg_margin_diff":           h_mg5 - a_mg5,
             "head_to_head_win_rate":     h2h_by_id.get(gid, np.nan),
             "venue_home_win_rate":       venue_wr_by_id.get(gid, np.nan),
             "days_since_last_game_home": home_tv["_days_rest"].get(gid, np.nan),
@@ -324,6 +354,8 @@ def build_game_features(game: dict, historical_df: pd.DataFrame) -> pd.DataFrame
 
     h_stats = _rolling_stats(team_view, home, dt)
     a_stats = _rolling_stats(team_view, away, dt)
+    h_stats_3 = _rolling_stats(team_view, home, dt, window=_WINDOW_SHORT)
+    a_stats_3 = _rolling_stats(team_view, away, dt, window=_WINDOW_SHORT)
     ladder = _ladder_positions(df, season, dt)
 
     return pd.DataFrame([{
@@ -333,6 +365,14 @@ def build_game_features(game: dict, historical_df: pd.DataFrame) -> pd.DataFrame
         "away_avg_score_last_5": a_stats["avg_score"],
         "home_avg_margin_last_5": h_stats["avg_margin"],
         "away_avg_margin_last_5": a_stats["avg_margin"],
+        "home_win_rate_last_3": h_stats_3["win_rate"],
+        "away_win_rate_last_3": a_stats_3["win_rate"],
+        "home_avg_score_last_3": h_stats_3["avg_score"],
+        "away_avg_score_last_3": a_stats_3["avg_score"],
+        "home_avg_margin_last_3": h_stats_3["avg_margin"],
+        "away_avg_margin_last_3": a_stats_3["avg_margin"],
+        "win_rate_diff": h_stats["win_rate"] - a_stats["win_rate"],
+        "avg_margin_diff": h_stats["avg_margin"] - a_stats["avg_margin"],
         "head_to_head_win_rate": _h2h_win_rate(team_view, home, away, dt),
         "venue_home_win_rate": _venue_win_rate(df, home, venue, dt),
         "days_since_last_game_home": _days_rest(team_view, home, dt),
