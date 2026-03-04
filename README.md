@@ -5,7 +5,7 @@ Building an AFL tipping model - without really knowing what I'm doing
 
 1. Install dependencies:
    ```bash
-   pip install -e .
+   uv sync
    ```
 
 2. Run the data + model pipeline from the repository root:
