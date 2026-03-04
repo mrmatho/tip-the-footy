@@ -2,7 +2,7 @@
 train_model.py – Train and save the AFL Tipping Model.
 
 Loads the engineered feature dataset, performs a temporal train/val/test
-split, trains an XGBoost winner classifier and margin regressor, evaluates
+split, trains a LightGBM winner classifier and margin regressor, evaluates
 them on the held-out 2024 season, and persists both models to disk.
 """
 
@@ -12,7 +12,7 @@ import sys
 
 import numpy as np
 import pandas as pd
-import xgboost as xgb
+import lightgbm as lgb
 from sklearn.metrics import (
     accuracy_score,
     log_loss,
@@ -37,7 +37,7 @@ def train(data: pd.DataFrame):
         data: Feature DataFrame produced by ``build_features``.
 
     Returns:
-        Tuple of ``(classifier, regressor, col_means)`` – fitted XGBoost
+        Tuple of ``(classifier, regressor, col_means)`` – fitted LightGBM
         models and a :class:`pandas.Series` of per-feature training means
         used for NaN imputation at inference time.
 
@@ -71,18 +71,32 @@ def train(data: pd.DataFrame):
     y_reg_test = test_df[TARGET_REG] if not test_df.empty else pd.Series(dtype=float)
 
     # ── Classification model (winner prediction) ──────────────────────────────
-    clf = xgb.XGBClassifier(
-        n_estimators=200, learning_rate=0.05, eval_metric="logloss"
+    clf = lgb.LGBMClassifier(
+        n_estimators=500,
+        learning_rate=0.03,
+        max_depth=5,
+        num_leaves=31,
+        subsample=0.8,
+        colsample_bytree=0.8,
+        min_child_samples=20,
+        verbose=-1,
     )
-    eval_set_clf = [(X_val, y_clf_val)] if not X_val.empty else []
-    clf.fit(X_train, y_clf_train, eval_set=eval_set_clf, verbose=False)
+    eval_set_clf = [(X_val, y_clf_val)] if not X_val.empty else None
+    clf.fit(X_train, y_clf_train, eval_set=eval_set_clf)
 
     # ── Regression model (margin prediction) ──────────────────────────────────
-    reg = xgb.XGBRegressor(
-        n_estimators=200, learning_rate=0.05, eval_metric="mae"
+    reg = lgb.LGBMRegressor(
+        n_estimators=500,
+        learning_rate=0.03,
+        max_depth=5,
+        num_leaves=31,
+        subsample=0.8,
+        colsample_bytree=0.8,
+        min_child_samples=20,
+        verbose=-1,
     )
-    eval_set_reg = [(X_val, y_reg_val)] if not X_val.empty else []
-    reg.fit(X_train, y_reg_train, eval_set=eval_set_reg, verbose=False)
+    eval_set_reg = [(X_val, y_reg_val)] if not X_val.empty else None
+    reg.fit(X_train, y_reg_train, eval_set=eval_set_reg)
 
     # ── Evaluate on held-out test set ─────────────────────────────────────────
     if not X_test.empty:
