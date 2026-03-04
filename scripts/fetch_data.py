@@ -12,13 +12,27 @@ import pandas as pd
 import requests
 
 BASE_URL = "https://api.squiggle.com.au/"
+HISTORICAL_GAMES_PATH = "data/historical_games.csv"
 
 
-def fetch_games(season: int) -> pd.DataFrame:
+def _load_cached_historical(path: str = HISTORICAL_GAMES_PATH) -> pd.DataFrame:
+    """Load cached historical games if the CSV exists and contains rows."""
+    if not os.path.exists(path) or os.path.getsize(path) == 0:
+        return pd.DataFrame()
+
+    cached = pd.read_csv(path)
+    if cached.empty:
+        return pd.DataFrame()
+    return cached
+
+
+def fetch_games(season: int, force: bool = False) -> pd.DataFrame:
     """Fetch all completed games for a given AFL season from the Squiggle API.
 
     Args:
         season: The AFL season year (e.g. 2023).
+        force: When ``True``, always fetch from Squiggle even if
+            ``data/historical_games.csv`` already has data.
 
     Returns:
         A DataFrame with one row per game and columns provided by the API.
@@ -26,6 +40,16 @@ def fetch_games(season: int) -> pd.DataFrame:
     Raises:
         requests.HTTPError: If the API returns a non-2xx status code.
     """
+    if not force:
+        cached = _load_cached_historical()
+        if not cached.empty:
+            if "season" in cached.columns:
+                season_games = cached[cached["season"] == season].copy()
+                if not season_games.empty:
+                    return season_games.reset_index(drop=True)
+            else:
+                return cached.reset_index(drop=True)
+
     params = {"q": "games", "year": season}
     response = requests.get(BASE_URL, params=params, timeout=30, headers={"User-Agent": "AFL Tipping Model (geoffmatheson@gmail.com)"})
     response.raise_for_status()
@@ -36,17 +60,25 @@ def fetch_games(season: int) -> pd.DataFrame:
     return df
 
 
-def fetch_historical(start_year: int = 2010, end_year: int = 2024) -> pd.DataFrame:
+def fetch_historical(
+    start_year: int = 2010, end_year: int = 2024, force: bool = False
+) -> pd.DataFrame:
     """Fetch and combine game data for a range of AFL seasons.
 
     Args:
         start_year: First season to include (inclusive).
         end_year: Last season to include (inclusive).
+        force: When ``True``, always fetch from Squiggle.
 
     Returns:
         A single DataFrame containing all games across the requested seasons.
     """
-    frames = [fetch_games(year) for year in range(start_year, end_year + 1)]
+    if not force:
+        cached = _load_cached_historical()
+        if not cached.empty:
+            return cached.reset_index(drop=True)
+
+    frames = [fetch_games(year, force=force) for year in range(start_year, end_year + 1)]
     non_empty = [f for f in frames if not f.empty]
     if not non_empty:
         return pd.DataFrame()
@@ -60,7 +92,7 @@ def fetch_current_season() -> pd.DataFrame:
         A DataFrame containing games for the current calendar year.
     """
     current_year = datetime.date.today().year
-    return fetch_games(current_year)
+    return fetch_games(current_year, force=True)
 
 
 def save_data(df: pd.DataFrame, path: str) -> None:
