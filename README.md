@@ -9,7 +9,12 @@ Building an AFL tipping model - without really knowing what I'm doing
    uv sync
    ```
 
-2. Run the data + model pipeline from the repository root:
+2. Run the full pipeline with the orchestration script:
+   ```bash
+   python scripts/run_pipeline.py
+   ```
+
+   Or run each step individually:
    ```bash
    python scripts/fetch_data.py
    python scripts/build_features.py
