@@ -70,13 +70,13 @@ class TippingModel:
         """
         win_prob = float(self.classifier.predict_proba(features)[0][1])
         margin = float(self.regressor.predict(features)[0])
-        winner = home_team if margin >= 0 else away_team
+        winner = home_team if win_prob >= 0.5 else away_team
         return TippingPrediction(
             home_team=home_team,
             away_team=away_team,
             predicted_winner=winner,
             predicted_margin=abs(margin),
-            win_probability=win_prob if margin >= 0 else 1 - win_prob,
+            win_probability=win_prob if win_prob >= 0.5 else 1 - win_prob,
         )
 
 

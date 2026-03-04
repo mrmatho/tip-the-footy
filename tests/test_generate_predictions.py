@@ -114,6 +114,25 @@ class TestTippingModelPredict:
         pred = model.predict(np.zeros((1, 12)), "Home", "Away")
         assert pred.predicted_winner == "Home"
 
+    def test_win_probability_always_at_least_50_percent(self):
+        """Predicted winner must never have a win probability below 50%."""
+        model = _make_mock_model(margin=15.0, win_prob=0.7)
+        pred = model.predict(np.zeros((1, 12)), "HomeTeam", "AwayTeam")
+        assert pred.win_probability >= 0.5
+
+    def test_classifier_overrides_regressor_when_they_disagree(self):
+        """When regressor says home wins but classifier disagrees, use classifier.
+
+        This reproduces the reported bug where a team was listed as 'predicted
+        winner' but had a win probability below 50% (e.g. 0.358).
+        """
+        # Regressor says home wins (positive margin), but classifier gives home
+        # only a 35.8% chance — away team should be the predicted winner.
+        model = _make_mock_model(margin=5.0, win_prob=0.358)
+        pred = model.predict(np.zeros((1, 12)), "Carlton", "Geelong")
+        assert pred.predicted_winner == "Geelong"
+        assert pred.win_probability == pytest.approx(1 - 0.358)
+
 
 # ---------------------------------------------------------------------------
 # Picklable stubs (MagicMock cannot be pickled)
@@ -203,6 +222,7 @@ class TestPredictRound:
             BASE_URL,
             params={"q": "games", "year": 2024, "round": 5},
             timeout=30,
+            headers={"User-Agent": "AFL Tipping Model (geoffmatheson@gmail.com)"},
         )
 
     def test_empty_round_returns_empty_dataframe(self):
