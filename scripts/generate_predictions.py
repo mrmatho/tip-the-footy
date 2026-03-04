@@ -54,14 +54,14 @@ class TippingModel:
 
     def predict(
         self,
-        features: np.ndarray,
+        features: pd.DataFrame,
         home_team: str,
         away_team: str,
     ) -> TippingPrediction:
         """Predict the winner and margin for a single match.
 
         Args:
-            features: 2-D array of shape ``(1, n_features)``.
+            features: DataFrame of shape ``(1, n_features)`` with named columns.
             home_team: Home team name.
             away_team: Away team name.
 
@@ -202,7 +202,7 @@ def predict_round(
     results = []
     for game in games:
         feat_df = build_game_features(game, historical_df)
-        X = feat_df[FEATURE_COLS].fillna(impute_values).values
+        X = feat_df[FEATURE_COLS].fillna(impute_values)
         prediction = model.predict(X, home_team=game["hteam"], away_team=game["ateam"])
         results.append({
             "round": round_number,
