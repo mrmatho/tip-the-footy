@@ -14,6 +14,11 @@ Building an AFL tipping model - without really knowing what I'm doing
    python scripts/run_pipeline.py
    ```
 
+3. Or launch the marimo pipeline playground:
+   ```bash
+   marimo run notebooks/pipeline_playground.py
+   ```
+
    Or run each step individually:
    ```bash
    python scripts/fetch_data.py

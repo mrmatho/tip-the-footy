@@ -80,10 +80,19 @@ def _default_config_path() -> str:
     return os.path.join(repo_root, "config", "model_config.toml")
 
 
+def _effective_config_path(config_path: str | None = None) -> str:
+    if config_path:
+        return config_path
+    env_path = os.getenv("TIP_FOOTY_CONFIG")
+    if env_path:
+        return env_path
+    return _default_config_path()
+
+
 @lru_cache(maxsize=1)
 def load_model_config(config_path: str | None = None) -> dict:
     """Load application config from TOML and merge with defaults."""
-    path = config_path or _default_config_path()
+    path = _effective_config_path(config_path)
     merged = copy.deepcopy(DEFAULT_CONFIG)
     if os.path.exists(path):
         with open(path, "rb") as f:

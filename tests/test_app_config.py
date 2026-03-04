@@ -28,3 +28,23 @@ class TestAppConfig:
         assert cfg["training"]["split"]["train_end_season"] == 2021
         # Unspecified keys should remain from defaults.
         assert cfg["elo"]["home_advantage"] == DEFAULT_CONFIG["elo"]["home_advantage"]
+
+    def test_uses_tip_footy_config_env_var(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = os.path.join(tmpdir, "model_config.toml")
+            with open(path, "w", encoding="utf-8") as f:
+                f.write("[elo]\nhome_advantage = 65.0\n")
+
+            old = os.environ.get("TIP_FOOTY_CONFIG")
+            os.environ["TIP_FOOTY_CONFIG"] = path
+            try:
+                load_model_config.cache_clear()
+                cfg = load_model_config()
+            finally:
+                if old is None:
+                    os.environ.pop("TIP_FOOTY_CONFIG", None)
+                else:
+                    os.environ["TIP_FOOTY_CONFIG"] = old
+                load_model_config.cache_clear()
+
+        assert cfg["elo"]["home_advantage"] == 65.0
