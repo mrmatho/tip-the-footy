@@ -5,6 +5,7 @@ Building an AFL tipping model - without really knowing what I'm doing
 
 1. Install dependencies:
    ```bash
+   # install uv first if needed: https://docs.astral.sh/uv/getting-started/installation/
    uv sync
    ```
 
