@@ -1,6 +1,6 @@
 round,home_team,away_team,predicted_winner,predicted_margin,win_probability
-0,Sydney,Carlton,Sydney,0.6,0.732
-0,Gold Coast,Geelong,Gold Coast,2.1,0.593
-0,Greater Western Sydney,Hawthorn,Greater Western Sydney,13.1,0.53
-0,Brisbane Lions,Western Bulldogs,Brisbane Lions,6.6,0.728
-0,St Kilda,Collingwood,Collingwood,2.9,0.648
+0,Sydney,Carlton,Sydney,5.1,0.699
+0,Gold Coast,Geelong,Geelong,2.8,0.674
+0,Greater Western Sydney,Hawthorn,Hawthorn,15.8,0.547
+0,Brisbane Lions,Western Bulldogs,Brisbane Lions,11.1,0.775
+0,St Kilda,Collingwood,Collingwood,5.3,0.678

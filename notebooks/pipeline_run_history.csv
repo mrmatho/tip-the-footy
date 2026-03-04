@@ -1,0 +1,6 @@
+timestamp,mode,elo_k,elo_home_advantage,elo_reversion,rolling_window,rolling_window_short,train_end_season,val_season,test_season,n_predictions,avg_win_probability,avg_predicted_margin,prediction_file
+2026-03-05 09:10:47,manual slider settings,20.0,50.0,0.1,5,3,2022,2023,2024,5,0.6462,5.06,round_0.csv
+2026-03-05 09:10:58,manual slider settings,20.0,50.0,0.1,5,3,2022,2023,2024,5,0.6462,5.06,round_0.csv
+2026-03-05 09:12:18,preset: aggressive,32.0,70.0,0.05,5,3,2022,2023,2024,5,0.645,8.36,round_0.csv
+2026-03-05 09:12:55,manual slider settings,20.0,50.0,0.1,5,3,2023,2024,2025,5,0.657,8.08,round_0.csv
+2026-03-05 09:13:45,manual slider settings,20.0,50.0,0.15,5,3,2023,2024,2025,5,0.6746,8.02,round_0.csv
