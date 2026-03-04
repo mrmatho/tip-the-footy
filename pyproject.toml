@@ -20,6 +20,3 @@ dev = [
     "pytest-mock>=3.11",
 ]
 
-[build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"

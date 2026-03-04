@@ -1,0 +1,42 @@
+[
+  {
+    "round": 0,
+    "home_team": "Sydney",
+    "away_team": "Carlton",
+    "predicted_winner": "Sydney",
+    "predicted_margin": 26.7,
+    "win_probability": 0.54
+  },
+  {
+    "round": 0,
+    "home_team": "Gold Coast",
+    "away_team": "Geelong",
+    "predicted_winner": "Gold Coast",
+    "predicted_margin": 20.6,
+    "win_probability": 0.678
+  },
+  {
+    "round": 0,
+    "home_team": "Greater Western Sydney",
+    "away_team": "Hawthorn",
+    "predicted_winner": "Greater Western Sydney",
+    "predicted_margin": 35.5,
+    "win_probability": 0.782
+  },
+  {
+    "round": 0,
+    "home_team": "Brisbane Lions",
+    "away_team": "Western Bulldogs",
+    "predicted_winner": "Brisbane Lions",
+    "predicted_margin": 21.4,
+    "win_probability": 0.434
+  },
+  {
+    "round": 0,
+    "home_team": "St Kilda",
+    "away_team": "Collingwood",
+    "predicted_winner": "St Kilda",
+    "predicted_margin": 15.8,
+    "win_probability": 0.676
+  }
+]

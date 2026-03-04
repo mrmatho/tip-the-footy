@@ -17,6 +17,8 @@ import numpy as np
 import pandas as pd
 import requests
 
+USER_AGENT="AFL Tipping Model (geoffmatheson@gmail.com)"
+
 # Allow importing sibling scripts both when run directly and as a module.
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -184,7 +186,7 @@ def predict_round(
         requests.HTTPError: If the Squiggle API request fails.
     """
     params = {"q": "games", "year": season, "round": round_number}
-    response = requests.get(BASE_URL, params=params, timeout=30)
+    response = requests.get(BASE_URL, params=params, timeout=30, headers={"User-Agent": USER_AGENT})
     response.raise_for_status()
     games = response.json().get("games", [])
 
@@ -220,7 +222,7 @@ if __name__ == "__main__":
 
     # Determine the next incomplete round.
     resp = requests.get(
-        BASE_URL, params={"q": "games", "year": current_year}, timeout=30
+        BASE_URL, params={"q": "games", "year": current_year}, timeout=30, headers={"User-Agent": USER_AGENT}
     )
     resp.raise_for_status()
     all_games = resp.json().get("games", [])

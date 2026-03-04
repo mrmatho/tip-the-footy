@@ -27,7 +27,7 @@ def fetch_games(season: int) -> pd.DataFrame:
         requests.HTTPError: If the API returns a non-2xx status code.
     """
     params = {"q": "games", "year": season}
-    response = requests.get(BASE_URL, params=params, timeout=30)
+    response = requests.get(BASE_URL, params=params, timeout=30, headers={"User-Agent": "AFL Tipping Model (geoffmatheson@gmail.com)"})
     response.raise_for_status()
     games = response.json().get("games", [])
     df = pd.DataFrame(games)
