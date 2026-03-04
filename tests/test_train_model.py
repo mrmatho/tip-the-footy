@@ -100,6 +100,13 @@ class TestTrain:
         assert clf is not None
         assert reg is not None
 
+    def test_raises_on_missing_feature_columns(self):
+        """train() should fail fast if required feature columns are missing."""
+        data = _make_feature_data()
+        bad = data.drop(columns=[FEATURE_COLS[0]])
+        with pytest.raises(ValueError, match="missing required feature columns"):
+            train(bad)
+
 
 # ---------------------------------------------------------------------------
 # save_models

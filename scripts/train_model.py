@@ -42,8 +42,16 @@ def train(data: pd.DataFrame):
         used for NaN imputation at inference time.
 
     Raises:
+        ValueError: If required feature columns are missing.
         ValueError: If the training set is empty after applying the split.
     """
+    missing_features = [c for c in FEATURE_COLS if c not in data.columns]
+    if missing_features:
+        raise ValueError(
+            "Training data is missing required feature columns: "
+            f"{missing_features}. Rebuild features before training."
+        )
+
     train_df = data[data["season"] <= 2022].dropna(
         subset=[TARGET_CLF, TARGET_REG]
     )

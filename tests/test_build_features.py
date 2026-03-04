@@ -11,6 +11,7 @@ import pytest
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from scripts.build_features import (
+    ELO_START,
     FEATURE_COLS,
     TARGET_CLF,
     TARGET_REG,
@@ -263,6 +264,15 @@ class TestBuildFeatures:
         assert np.isnan(first["home_win_rate_last_5"])
         assert np.isnan(first["away_win_rate_last_5"])
 
+    def test_first_match_starts_from_baseline_elo(self):
+        """First observed game should use baseline pre-match Elo for both teams."""
+        df = build_features(SAMPLE_GAMES)
+        first = df[df["match_id"] == 1].iloc[0]
+        assert first["home_elo_pre"] == pytest.approx(ELO_START)
+        assert first["away_elo_pre"] == pytest.approx(ELO_START)
+        # Home-advantage term means baseline expected home win is > 0.5.
+        assert first["elo_expected_home_win"] > 0.5
+
 
 # ---------------------------------------------------------------------------
 # build_game_features
@@ -306,6 +316,17 @@ class TestBuildGameFeatures:
         }
         df = build_game_features(game, SAMPLE_GAMES)
         assert len(df) == 1
+
+    def test_includes_elo_columns_for_upcoming_game(self):
+        game = {
+            "hteam": "Collingwood", "ateam": "Carlton",
+            "venue": "MCG", "date": "2023-03-31 19:30:00", "year": 2023,
+        }
+        df = build_game_features(game, SAMPLE_GAMES)
+        assert "home_elo_pre" in df.columns
+        assert "away_elo_pre" in df.columns
+        assert "elo_diff_pre" in df.columns
+        assert "elo_expected_home_win" in df.columns
 
     def test_raises_on_empty_historical_df(self):
         """build_game_features should raise ValueError when historical_df is empty."""

@@ -257,6 +257,15 @@ class TestPredictRound:
             df = predict_round(2, 2023, model, SAMPLE_HISTORICAL)
         assert len(df) == 1
 
+    def test_handles_incomplete_col_means(self):
+        """predict_round should backfill missing mean entries from historical features."""
+        model = _make_mock_model(margin=15.0)
+        model.col_means = pd.Series({"home_win_rate_last_5": 0.5})
+        with patch("scripts.generate_predictions.requests.get") as mock_get:
+            mock_get.return_value = _make_response({"games": SAMPLE_UPCOMING})
+            df = predict_round(2, 2023, model, SAMPLE_HISTORICAL)
+        assert len(df) == 1
+
 
 # ---------------------------------------------------------------------------
 # save_predictions

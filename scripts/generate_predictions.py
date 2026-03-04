@@ -191,17 +191,25 @@ def predict_round(
     games = response.json().get("games", [])
 
     # Determine imputation values consistent with training-time strategy.
-    # Prefer the means stored on the model; if unavailable, compute from
-    # the provided historical dataset to avoid arbitrary fillna(0) values.
+    # Prefer the means stored on the model; if unavailable (or incomplete),
+    # compute from historical data to avoid arbitrary fillna(0) values.
+    _hist_features = build_features(historical_df)
+    historical_means = _hist_features[FEATURE_COLS].mean()
     if model.col_means is not None:
-        impute_values = model.col_means
+        impute_values = model.col_means.reindex(FEATURE_COLS)
+        impute_values = impute_values.fillna(historical_means)
     else:
-        _hist_features = build_features(historical_df)
-        impute_values = _hist_features[FEATURE_COLS].mean()
+        impute_values = historical_means
 
     results = []
     for game in games:
         feat_df = build_game_features(game, historical_df)
+        missing_cols = [c for c in FEATURE_COLS if c not in feat_df.columns]
+        if missing_cols:
+            raise ValueError(
+                "Prediction feature frame is missing required columns: "
+                f"{missing_cols}."
+            )
         X = feat_df[FEATURE_COLS].fillna(impute_values)
         prediction = model.predict(X, home_team=game["hteam"], away_team=game["ateam"])
         results.append({

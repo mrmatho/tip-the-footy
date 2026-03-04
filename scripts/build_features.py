@@ -14,6 +14,10 @@ import pandas as pd
 # ── Feature / target column names ────────────────────────────────────────────
 
 FEATURE_COLS = [
+    "home_elo_pre",
+    "away_elo_pre",
+    "elo_diff_pre",
+    "elo_expected_home_win",
     "home_win_rate_last_5",
     "away_win_rate_last_5",
     "home_avg_score_last_5",
@@ -41,6 +45,9 @@ TARGET_REG = "margin"    # home_score − away_score (negative = away win)
 
 _WINDOW = 5   # rolling-window size for recent-form features
 _WINDOW_SHORT = 3  # shorter rolling window to capture very recent form
+ELO_START = 1500.0
+ELO_K = 20.0
+ELO_HOME_ADV = 50.0
 
 
 # ── Private helpers ───────────────────────────────────────────────────────────
@@ -172,6 +179,82 @@ def _ladder_positions(
     return {team: rank for rank, team in enumerate(wins.index, start=1)}
 
 
+def _elo_expected_home(home_elo: float, away_elo: float) -> float:
+    """Return expected home-team win probability from Elo ratings."""
+    return float(1.0 / (1.0 + 10.0 ** ((away_elo - (home_elo + ELO_HOME_ADV)) / 400.0)))
+
+
+def _compute_pre_match_elos(df: pd.DataFrame) -> dict:
+    """Return ``{match_id: (home_elo_pre, away_elo_pre, expected_home_win)}``."""
+    ratings: dict[str, float] = {}
+    by_id: dict = {}
+    ordered = df.sort_values(["date_dt", "id"]).reset_index(drop=True)
+
+    for _, row in ordered.iterrows():
+        home = str(row["hteam"])
+        away = str(row["ateam"])
+
+        home_pre = float(ratings.get(home, ELO_START))
+        away_pre = float(ratings.get(away, ELO_START))
+        expected_home = _elo_expected_home(home_pre, away_pre)
+
+        by_id[row["id"]] = (home_pre, away_pre, expected_home)
+
+        hscore = float(row["hscore"])
+        ascore = float(row["ascore"])
+        if hscore > ascore:
+            actual_home = 1.0
+        elif hscore < ascore:
+            actual_home = 0.0
+        else:
+            actual_home = 0.5
+
+        delta = ELO_K * (actual_home - expected_home)
+        ratings[home] = home_pre + delta
+        ratings[away] = away_pre - delta
+
+    return by_id
+
+
+def _elo_for_upcoming(df: pd.DataFrame, home_team: str, away_team: str, before_dt) -> tuple:
+    """Return ``(home_elo_pre, away_elo_pre, expected_home_win)`` before *before_dt*."""
+    played = df[
+        (df["date_dt"] < before_dt)
+        & df["hscore"].notna()
+        & df["ascore"].notna()
+    ]
+    if played.empty:
+        home_pre = float(ELO_START)
+        away_pre = float(ELO_START)
+        return home_pre, away_pre, _elo_expected_home(home_pre, away_pre)
+
+    ratings: dict[str, float] = {}
+    ordered = played.sort_values(["date_dt", "id"]).reset_index(drop=True)
+    for _, row in ordered.iterrows():
+        home = str(row["hteam"])
+        away = str(row["ateam"])
+        home_pre = float(ratings.get(home, ELO_START))
+        away_pre = float(ratings.get(away, ELO_START))
+        expected_home = _elo_expected_home(home_pre, away_pre)
+
+        hscore = float(row["hscore"])
+        ascore = float(row["ascore"])
+        if hscore > ascore:
+            actual_home = 1.0
+        elif hscore < ascore:
+            actual_home = 0.0
+        else:
+            actual_home = 0.5
+
+        delta = ELO_K * (actual_home - expected_home)
+        ratings[home] = home_pre + delta
+        ratings[away] = away_pre - delta
+
+    home_pre = float(ratings.get(home_team, ELO_START))
+    away_pre = float(ratings.get(away_team, ELO_START))
+    return home_pre, away_pre, _elo_expected_home(home_pre, away_pre)
+
+
 # ── Public API ────────────────────────────────────────────────────────────────
 
 
@@ -256,11 +339,16 @@ def build_features(df: pd.DataFrame) -> pd.DataFrame:
             df, rrow["season"], rrow["date_dt"]
         )
 
+    elo_by_id = _compute_pre_match_elos(df)
+
     # ── Assemble feature rows ─────────────────────────────────────────────────
     records = []
     for _, row in df.iterrows():
         gid = row["id"]
         ladder = ladder_cache.get((row["season"], row["round"]), {})
+        home_elo_pre, away_elo_pre, elo_expected_home = elo_by_id.get(
+            gid, (ELO_START, ELO_START, _elo_expected_home(ELO_START, ELO_START))
+        )
         h_wr5 = home_tv["_win_rate"].get(gid, np.nan)
         a_wr5 = away_tv["_win_rate"].get(gid, np.nan)
         h_mg5 = home_tv["_avg_margin"].get(gid, np.nan)
@@ -271,6 +359,10 @@ def build_features(df: pd.DataFrame) -> pd.DataFrame:
             "round": row["round"],
             "home_team": str(row["hteam"]),
             "away_team": str(row["ateam"]),
+            "home_elo_pre":              home_elo_pre,
+            "away_elo_pre":              away_elo_pre,
+            "elo_diff_pre":              home_elo_pre - away_elo_pre,
+            "elo_expected_home_win":     elo_expected_home,
             "home_win_rate_last_5":      h_wr5,
             "away_win_rate_last_5":      a_wr5,
             "home_avg_score_last_5":     home_tv["_avg_score"].get(gid, np.nan),
@@ -357,8 +449,15 @@ def build_game_features(game: dict, historical_df: pd.DataFrame) -> pd.DataFrame
     h_stats_3 = _rolling_stats(team_view, home, dt, window=_WINDOW_SHORT)
     a_stats_3 = _rolling_stats(team_view, away, dt, window=_WINDOW_SHORT)
     ladder = _ladder_positions(df, season, dt)
+    home_elo_pre, away_elo_pre, elo_expected_home = _elo_for_upcoming(
+        df, home, away, dt
+    )
 
     return pd.DataFrame([{
+        "home_elo_pre": home_elo_pre,
+        "away_elo_pre": away_elo_pre,
+        "elo_diff_pre": home_elo_pre - away_elo_pre,
+        "elo_expected_home_win": elo_expected_home,
         "home_win_rate_last_5": h_stats["win_rate"],
         "away_win_rate_last_5": a_stats["win_rate"],
         "home_avg_score_last_5": h_stats["avg_score"],
