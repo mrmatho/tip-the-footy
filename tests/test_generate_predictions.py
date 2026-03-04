@@ -10,6 +10,7 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import pandas as pd
 import pytest
+import requests
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
@@ -42,8 +43,8 @@ def _make_response(json_data: dict, status_code: int = 200) -> MagicMock:
     mock_resp.json.return_value = json_data
     mock_resp.raise_for_status = MagicMock()
     if status_code >= 400:
-        mock_resp.raise_for_status.side_effect = Exception(
-            f"HTTP Error {status_code}"
+        mock_resp.raise_for_status.side_effect = requests.exceptions.HTTPError(
+            f"HTTP Error {status_code}", response=mock_resp
         )
     return mock_resp
 
@@ -146,8 +147,13 @@ class TestLoadModel:
             model = load_model(tmpdir)
         assert isinstance(model, TippingModel)
 
+    def test_raises_runtime_error_for_missing_files(self):
+        """load_model should raise RuntimeError with a helpful message when files are absent."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with pytest.raises(RuntimeError, match="Required model artefacts are missing"):
+                load_model(tmpdir)
+
     def test_loads_col_means_when_present(self):
-        import pandas as pd
         col_means = pd.Series({"a": 0.5, "b": 0.3})
         with tempfile.TemporaryDirectory() as tmpdir:
             with open(os.path.join(tmpdir, "classifier.pkl"), "wb") as f:
@@ -219,8 +225,17 @@ class TestPredictRound:
         model = _make_mock_model()
         with patch("scripts.generate_predictions.requests.get") as mock_get:
             mock_get.return_value = _make_response({}, status_code=500)
-            with pytest.raises(Exception):
+            with pytest.raises(requests.exceptions.HTTPError):
                 predict_round(1, 2023, model, SAMPLE_HISTORICAL)
+
+    def test_uses_historical_fallback_when_no_col_means(self):
+        """predict_round should compute imputation means from historical data when col_means is None."""
+        model = _make_mock_model(margin=15.0)
+        model.col_means = None
+        with patch("scripts.generate_predictions.requests.get") as mock_get:
+            mock_get.return_value = _make_response({"games": SAMPLE_UPCOMING})
+            df = predict_round(2, 2023, model, SAMPLE_HISTORICAL)
+        assert len(df) == 1
 
 
 # ---------------------------------------------------------------------------

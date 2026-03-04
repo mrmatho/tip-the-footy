@@ -307,6 +307,25 @@ class TestBuildGameFeatures:
         df = build_game_features(game, SAMPLE_GAMES)
         assert len(df) == 1
 
+    def test_raises_on_empty_historical_df(self):
+        """build_game_features should raise ValueError when historical_df is empty."""
+        game = {
+            "hteam": "Collingwood", "ateam": "Carlton",
+            "venue": "MCG", "date": "2023-03-31 19:30:00", "year": 2023,
+        }
+        with pytest.raises(ValueError, match="non-empty historical data"):
+            build_game_features(game, pd.DataFrame())
+
+    def test_raises_on_missing_required_columns(self):
+        """build_game_features should raise ValueError when required columns are absent."""
+        game = {
+            "hteam": "Collingwood", "ateam": "Carlton",
+            "venue": "MCG", "date": "2023-03-31 19:30:00", "year": 2023,
+        }
+        bad_df = pd.DataFrame([{"foo": "bar"}])
+        with pytest.raises(ValueError, match="columns are missing"):
+            build_game_features(game, bad_df)
+
 
 # ---------------------------------------------------------------------------
 # save_features

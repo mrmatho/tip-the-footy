@@ -30,7 +30,7 @@ def train(data: pd.DataFrame):
     """Train winner classifier and margin regressor using a temporal split.
 
     Training set:  seasons ≤ 2022
-    Validation set: season 2023  (used for early stopping)
+    Validation set: season 2023  (used for validation/monitoring)
     Test set:       season 2024  (held-out evaluation)
 
     Args:
@@ -45,13 +45,13 @@ def train(data: pd.DataFrame):
         ValueError: If the training set is empty after applying the split.
     """
     train_df = data[data["season"] <= 2022].dropna(
-        subset=FEATURE_COLS + [TARGET_CLF, TARGET_REG]
+        subset=[TARGET_CLF, TARGET_REG]
     )
     val_df = data[data["season"] == 2023].dropna(
-        subset=FEATURE_COLS + [TARGET_CLF, TARGET_REG]
+        subset=[TARGET_CLF, TARGET_REG]
     )
     test_df = data[data["season"] == 2024].dropna(
-        subset=FEATURE_COLS + [TARGET_CLF, TARGET_REG]
+        subset=[TARGET_CLF, TARGET_REG]
     )
 
     if train_df.empty:

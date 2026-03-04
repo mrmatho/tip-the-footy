@@ -17,7 +17,14 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install -r requirements.txt
-      - run: python scripts/generate_predictions.py
+      - name: Fetch historical data
+        run: python scripts/fetch_data.py
+      - name: Build feature dataset
+        run: python scripts/build_features.py
+      - name: Train models
+        run: python scripts/train_model.py
+      - name: Generate predictions
+        run: python scripts/generate_predictions.py
       - uses: actions/upload-artifact@v4
         with:
           name: predictions

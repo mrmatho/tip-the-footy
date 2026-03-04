@@ -191,34 +191,76 @@ def build_features(df: pd.DataFrame) -> pd.DataFrame:
     all_teams = set(df["hteam"].tolist() + df["ateam"].tolist())
     mid_position = len(all_teams) // 2 + 1
 
+    # ── Vectorised rolling form and rest-days (O(n log n)) ───────────────────
+    tv = team_view.sort_values(["team", "date_dt"]).reset_index(drop=True)
+    _grp = tv.groupby("team", sort=False)
+    tv["_win_rate"]   = _grp["won"].transform(
+        lambda x: x.shift(1).rolling(_WINDOW, min_periods=1).mean()
+    )
+    tv["_avg_score"]  = _grp["score"].transform(
+        lambda x: x.shift(1).rolling(_WINDOW, min_periods=1).mean()
+    )
+    tv["_avg_margin"] = _grp["margin"].transform(
+        lambda x: x.shift(1).rolling(_WINDOW, min_periods=1).mean()
+    )
+    _prev_dt = _grp["date_dt"].transform(lambda x: x.shift(1))
+    tv["_days_rest"]  = (tv["date_dt"] - _prev_dt).dt.days
+
+    # Index by game id for O(1) lookups per game.
+    home_tv = tv[tv["is_home"]].set_index("id")
+    away_tv = tv[~tv["is_home"]].set_index("id")
+
+    # ── Vectorised h2h win rate ──────────────────────────────────────────────
+    h2h = team_view.sort_values(["team", "opponent", "date_dt"]).reset_index(drop=True)
+    h2h["_h2h"] = (
+        h2h.groupby(["team", "opponent"], sort=False)["won"]
+        .transform(lambda x: x.shift(1).expanding().mean())
+    )
+    h2h_by_id = h2h[h2h["is_home"]].set_index("id")["_h2h"]
+
+    # ── Vectorised venue home win rate ───────────────────────────────────────
+    df_v = df.sort_values("date_dt").copy()
+    df_v["_hw"] = (df_v["hscore"] > df_v["ascore"]).astype(float)
+    df_v["_venue_wr"] = (
+        df_v.groupby(["hteam", "venue"], sort=False)["_hw"]
+        .transform(lambda x: x.shift(1).expanding().mean())
+    )
+    venue_wr_by_id = df_v.set_index("id")["_venue_wr"]
+
+    # ── Ladder positions (cached once per round, not once per game) ──────────
+    ladder_cache: dict = {}
+    for _, rrow in (
+        df[["season", "round", "date_dt"]]
+        .drop_duplicates(subset=["season", "round"])
+        .iterrows()
+    ):
+        ladder_cache[(rrow["season"], rrow["round"])] = _ladder_positions(
+            df, rrow["season"], rrow["date_dt"]
+        )
+
+    # ── Assemble feature rows ─────────────────────────────────────────────────
     records = []
     for _, row in df.iterrows():
-        dt = row["date_dt"]
-        home = str(row["hteam"])
-        away = str(row["ateam"])
-
-        h_stats = _rolling_stats(team_view, home, dt)
-        a_stats = _rolling_stats(team_view, away, dt)
-        ladder = _ladder_positions(df, row["season"], dt)
-
+        gid = row["id"]
+        ladder = ladder_cache.get((row["season"], row["round"]), {})
         records.append({
-            "match_id": row["id"],
+            "match_id": gid,
             "season": row["season"],
             "round": row["round"],
-            "home_team": home,
-            "away_team": away,
-            "home_win_rate_last_5": h_stats["win_rate"],
-            "away_win_rate_last_5": a_stats["win_rate"],
-            "home_avg_score_last_5": h_stats["avg_score"],
-            "away_avg_score_last_5": a_stats["avg_score"],
-            "home_avg_margin_last_5": h_stats["avg_margin"],
-            "away_avg_margin_last_5": a_stats["avg_margin"],
-            "head_to_head_win_rate": _h2h_win_rate(team_view, home, away, dt),
-            "venue_home_win_rate": _venue_win_rate(df, home, str(row["venue"]), dt),
-            "days_since_last_game_home": _days_rest(team_view, home, dt),
-            "days_since_last_game_away": _days_rest(team_view, away, dt),
-            "home_ladder_position": float(ladder.get(home, mid_position)),
-            "away_ladder_position": float(ladder.get(away, mid_position)),
+            "home_team": str(row["hteam"]),
+            "away_team": str(row["ateam"]),
+            "home_win_rate_last_5":      home_tv["_win_rate"].get(gid, np.nan),
+            "away_win_rate_last_5":      away_tv["_win_rate"].get(gid, np.nan),
+            "home_avg_score_last_5":     home_tv["_avg_score"].get(gid, np.nan),
+            "away_avg_score_last_5":     away_tv["_avg_score"].get(gid, np.nan),
+            "home_avg_margin_last_5":    home_tv["_avg_margin"].get(gid, np.nan),
+            "away_avg_margin_last_5":    away_tv["_avg_margin"].get(gid, np.nan),
+            "head_to_head_win_rate":     h2h_by_id.get(gid, np.nan),
+            "venue_home_win_rate":       venue_wr_by_id.get(gid, np.nan),
+            "days_since_last_game_home": home_tv["_days_rest"].get(gid, np.nan),
+            "days_since_last_game_away": away_tv["_days_rest"].get(gid, np.nan),
+            "home_ladder_position":      float(ladder.get(str(row["hteam"]), mid_position)),
+            "away_ladder_position":      float(ladder.get(str(row["ateam"]), mid_position)),
             TARGET_REG: float(row["hscore"]) - float(row["ascore"]),
             TARGET_CLF: int(row["hscore"] > row["ascore"]),
         })
@@ -240,7 +282,24 @@ def build_game_features(game: dict, historical_df: pd.DataFrame) -> pd.DataFrame
     Returns:
         Single-row DataFrame with :data:`FEATURE_COLS` columns (no target
         columns, since the match has not been played yet).
+
+    Raises:
+        ValueError: If ``historical_df`` is empty or missing required columns.
     """
+    if historical_df is None or historical_df.empty:
+        raise ValueError(
+            "build_game_features requires non-empty historical data. "
+            "Call fetch_historical (or equivalent) and ensure it returns at "
+            "least one completed game before building game-level features."
+        )
+    required_cols = {"date", "hteam", "ateam", "season"}
+    missing_cols = required_cols.difference(historical_df.columns)
+    if missing_cols:
+        raise ValueError(
+            "build_game_features expected historical_df to contain columns "
+            f"{sorted(required_cols)}, but these columns are missing: "
+            f"{sorted(missing_cols)}"
+        )
     df = _parse_dates(historical_df.copy())
     df = df.dropna(subset=["date_dt"]).reset_index(drop=True)
     if "complete" in df.columns:

@@ -75,6 +75,16 @@ class TestTrain:
         preds = reg.predict(X)
         assert len(preds) == 3
 
+    def test_retains_rows_with_nan_features(self):
+        """Training rows with NaN features should be kept and imputed, not dropped."""
+        data = _make_feature_data()
+        data_with_nan = data.copy()
+        # Introduce NaN into a feature column for all training rows
+        data_with_nan.loc[data_with_nan["season"] <= 2022, FEATURE_COLS[0]] = np.nan
+        clf, reg, col_means = train(data_with_nan)
+        assert clf is not None
+        assert reg is not None
+
     def test_raises_on_empty_training_set(self):
         """train() should raise ValueError when no training rows exist."""
         data = _make_feature_data()

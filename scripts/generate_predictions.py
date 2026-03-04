@@ -20,7 +20,7 @@ import requests
 # Allow importing sibling scripts both when run directly and as a module.
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from scripts.build_features import FEATURE_COLS, build_game_features  # noqa: E402
+from scripts.build_features import FEATURE_COLS, build_features, build_game_features  # noqa: E402
 
 BASE_URL = "https://api.squiggle.com.au/"
 
@@ -90,18 +90,51 @@ def load_model(models_dir: str = "models") -> TippingModel:
 
     Returns:
         A :class:`TippingModel` wrapping the loaded models.
+
+    Raises:
+        RuntimeError: If required model artefacts are missing or cannot be
+            unpickled, with guidance on how to resolve the issue.
     """
     clf_path = os.path.join(models_dir, "classifier.pkl")
     reg_path = os.path.join(models_dir, "regressor.pkl")
     means_path = os.path.join(models_dir, "col_means.pkl")
-    with open(clf_path, "rb") as f:
-        clf = pickle.load(f)
-    with open(reg_path, "rb") as f:
-        reg = pickle.load(f)
+
+    missing = [p for p in (clf_path, reg_path) if not os.path.exists(p)]
+    if missing:
+        searched_dir = os.path.abspath(models_dir)
+        missing_names = ", ".join(os.path.basename(p) for p in missing)
+        raise RuntimeError(
+            f"Required model artefacts are missing: {missing_names}. "
+            f"Searched directory: '{searched_dir}'. "
+            "Run the training pipeline (fetch_data.py → build_features.py → "
+            "train_model.py) to generate these files."
+        )
+
+    try:
+        with open(clf_path, "rb") as f:
+            clf = pickle.load(f)
+        with open(reg_path, "rb") as f:
+            reg = pickle.load(f)
+    except (pickle.UnpicklingError, EOFError, OSError) as exc:
+        raise RuntimeError(
+            f"Failed to load model artefacts from '{os.path.abspath(models_dir)}'. "
+            "The files may be corrupted or incompatible with this environment. "
+            "Try regenerating the models by rerunning the training pipeline."
+        ) from exc
+
     col_means = None
     if os.path.exists(means_path):
-        with open(means_path, "rb") as f:
-            col_means = pickle.load(f)
+        try:
+            with open(means_path, "rb") as f:
+                col_means = pickle.load(f)
+        except (pickle.UnpicklingError, EOFError, OSError) as exc:
+            raise RuntimeError(
+                f"Found 'col_means.pkl' but failed to load it from "
+                f"'{os.path.abspath(models_dir)}'. "
+                "The file may be corrupted. "
+                "Try regenerating the model artefacts."
+            ) from exc
+
     return TippingModel(clf, reg, col_means=col_means)
 
 
@@ -155,13 +188,19 @@ def predict_round(
     response.raise_for_status()
     games = response.json().get("games", [])
 
+    # Determine imputation values consistent with training-time strategy.
+    # Prefer the means stored on the model; if unavailable, compute from
+    # the provided historical dataset to avoid arbitrary fillna(0) values.
+    if model.col_means is not None:
+        impute_values = model.col_means
+    else:
+        _hist_features = build_features(historical_df)
+        impute_values = _hist_features[FEATURE_COLS].mean()
+
     results = []
     for game in games:
         feat_df = build_game_features(game, historical_df)
-        if model.col_means is not None:
-            X = feat_df[FEATURE_COLS].fillna(model.col_means).values
-        else:
-            X = feat_df[FEATURE_COLS].fillna(0).values
+        X = feat_df[FEATURE_COLS].fillna(impute_values).values
         prediction = model.predict(X, home_team=game["hteam"], away_team=game["ateam"])
         results.append({
             "round": round_number,
