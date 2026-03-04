@@ -11,6 +11,8 @@ import os
 import numpy as np
 import pandas as pd
 
+from scripts.app_config import load_model_config
+
 # ── Feature / target column names ────────────────────────────────────────────
 
 FEATURE_COLS = [
@@ -48,6 +50,15 @@ _WINDOW_SHORT = 3  # shorter rolling window to capture very recent form
 ELO_START = 1500.0
 ELO_K = 20.0
 ELO_HOME_ADV = 50.0
+ELO_SEASON_REVERSION = 0.10
+
+_CFG = load_model_config()
+_WINDOW = int(_CFG["features"]["rolling_window"])
+_WINDOW_SHORT = int(_CFG["features"]["rolling_window_short"])
+ELO_START = float(_CFG["elo"]["start_rating"])
+ELO_K = float(_CFG["elo"]["k_factor"])
+ELO_HOME_ADV = float(_CFG["elo"]["home_advantage"])
+ELO_SEASON_REVERSION = float(_CFG["elo"]["season_reversion"])
 
 
 # ── Private helpers ───────────────────────────────────────────────────────────
@@ -184,13 +195,31 @@ def _elo_expected_home(home_elo: float, away_elo: float) -> float:
     return float(1.0 / (1.0 + 10.0 ** ((away_elo - (home_elo + ELO_HOME_ADV)) / 400.0)))
 
 
+def _apply_season_reversion(ratings: dict[str, float]) -> dict[str, float]:
+    """Move every rating a fraction back toward the Elo mean at season boundaries."""
+    if ELO_SEASON_REVERSION <= 0:
+        return ratings
+    return {
+        team: float(ELO_START + (rating - ELO_START) * (1.0 - ELO_SEASON_REVERSION))
+        for team, rating in ratings.items()
+    }
+
+
 def _compute_pre_match_elos(df: pd.DataFrame) -> dict:
     """Return ``{match_id: (home_elo_pre, away_elo_pre, expected_home_win)}``."""
     ratings: dict[str, float] = {}
     by_id: dict = {}
-    ordered = df.sort_values(["date_dt", "id"]).reset_index(drop=True)
+    ordered = df.sort_values(["season", "date_dt", "id"]).reset_index(drop=True)
+    active_season = None
 
     for _, row in ordered.iterrows():
+        season = int(row["season"])
+        if active_season is None:
+            active_season = season
+        elif season != active_season:
+            ratings = _apply_season_reversion(ratings)
+            active_season = season
+
         home = str(row["hteam"])
         away = str(row["ateam"])
 
@@ -229,8 +258,16 @@ def _elo_for_upcoming(df: pd.DataFrame, home_team: str, away_team: str, before_d
         return home_pre, away_pre, _elo_expected_home(home_pre, away_pre)
 
     ratings: dict[str, float] = {}
-    ordered = played.sort_values(["date_dt", "id"]).reset_index(drop=True)
+    ordered = played.sort_values(["season", "date_dt", "id"]).reset_index(drop=True)
+    active_season = None
     for _, row in ordered.iterrows():
+        season = int(row["season"])
+        if active_season is None:
+            active_season = season
+        elif season != active_season:
+            ratings = _apply_season_reversion(ratings)
+            active_season = season
+
         home = str(row["hteam"])
         away = str(row["ateam"])
         home_pre = float(ratings.get(home, ELO_START))

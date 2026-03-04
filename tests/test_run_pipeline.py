@@ -11,7 +11,7 @@ import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from scripts.run_pipeline import run_pipeline
+from scripts.run_pipeline import DEFAULT_END_YEAR, DEFAULT_START_YEAR, run_pipeline
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -145,6 +145,28 @@ class TestRunPipeline:
                     end_year=2023,
                 )
             mock_fetch.assert_called_once_with(start_year=2015, end_year=2023)
+
+    def test_uses_config_default_years_when_not_provided(self):
+        """run_pipeline should use config-backed default historical year range."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            patches = self._patch_all(tmpdir, [_UPCOMING_GAME])
+            with (
+                patches["fetch"] as mock_fetch,
+                patches["save_data"],
+                patches["build"],
+                patches["save_feats"],
+                patches["train"],
+                patches["save_models"],
+                patches["requests_get"],
+                patches["load_model"],
+                patches["predict_round"],
+                patches["save_preds"],
+            ):
+                run_pipeline(data_dir=tmpdir, models_dir=tmpdir, predictions_dir=tmpdir)
+            mock_fetch.assert_called_once_with(
+                start_year=DEFAULT_START_YEAR,
+                end_year=DEFAULT_END_YEAR,
+            )
 
     def test_saves_historical_data(self):
         """run_pipeline should save historical data to the configured data directory."""

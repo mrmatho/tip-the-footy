@@ -17,14 +17,18 @@ import numpy as np
 import pandas as pd
 import requests
 
-USER_AGENT="AFL Tipping Model (geoffmatheson@gmail.com)"
-
 # Allow importing sibling scripts both when run directly and as a module.
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from scripts.app_config import load_model_config  # noqa: E402
 from scripts.build_features import FEATURE_COLS, build_features, build_game_features  # noqa: E402
 
-BASE_URL = "https://api.squiggle.com.au/"
+_CFG = load_model_config()
+BASE_URL = _CFG["data"]["base_url"]
+USER_AGENT = _CFG["data"]["user_agent"]
+REQUEST_TIMEOUT = int(_CFG["data"]["request_timeout"])
+MARGIN_ROUND_DECIMALS = int(_CFG["prediction"]["margin_round_decimals"])
+PROBABILITY_ROUND_DECIMALS = int(_CFG["prediction"]["probability_round_decimals"])
 
 
 # ── Data classes ──────────────────────────────────────────────────────────────
@@ -186,7 +190,7 @@ def predict_round(
         requests.HTTPError: If the Squiggle API request fails.
     """
     params = {"q": "games", "year": season, "round": round_number}
-    response = requests.get(BASE_URL, params=params, timeout=30, headers={"User-Agent": USER_AGENT})
+    response = requests.get(BASE_URL, params=params, timeout=REQUEST_TIMEOUT, headers={"User-Agent": USER_AGENT})
     response.raise_for_status()
     games = response.json().get("games", [])
 
@@ -217,8 +221,8 @@ def predict_round(
             "home_team": prediction.home_team,
             "away_team": prediction.away_team,
             "predicted_winner": prediction.predicted_winner,
-            "predicted_margin": round(prediction.predicted_margin, 1),
-            "win_probability": round(prediction.win_probability, 3),
+            "predicted_margin": round(prediction.predicted_margin, MARGIN_ROUND_DECIMALS),
+            "win_probability": round(prediction.win_probability, PROBABILITY_ROUND_DECIMALS),
         })
 
     return pd.DataFrame(results)
@@ -230,7 +234,7 @@ if __name__ == "__main__":
 
     # Determine the next incomplete round.
     resp = requests.get(
-        BASE_URL, params={"q": "games", "year": current_year}, timeout=30, headers={"User-Agent": USER_AGENT}
+        BASE_URL, params={"q": "games", "year": current_year}, timeout=REQUEST_TIMEOUT, headers={"User-Agent": USER_AGENT}
     )
     resp.raise_for_status()
     all_games = resp.json().get("games", [])

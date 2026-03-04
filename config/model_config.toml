@@ -1,0 +1,49 @@
+[data]
+base_url = "https://api.squiggle.com.au/"
+request_timeout = 30
+user_agent = "AFL Tipping Model (geoffmatheson@gmail.com)"
+
+[features]
+rolling_window = 5
+rolling_window_short = 3
+
+[elo]
+start_rating = 1500.0
+k_factor = 20.0
+home_advantage = 50.0
+season_reversion = 0.10
+
+[training.split]
+train_end_season = 2022
+val_season = 2023
+test_season = 2024
+
+[training.classifier]
+n_estimators = 500
+learning_rate = 0.03
+max_depth = 5
+num_leaves = 31
+subsample = 0.8
+colsample_bytree = 0.8
+min_child_samples = 20
+random_state = 42
+verbose = -1
+
+[training.regressor]
+n_estimators = 500
+learning_rate = 0.03
+max_depth = 5
+num_leaves = 31
+subsample = 0.8
+colsample_bytree = 0.8
+min_child_samples = 20
+random_state = 42
+verbose = -1
+
+[prediction]
+margin_round_decimals = 1
+probability_round_decimals = 3
+
+[pipeline]
+historical_start_year = 2010
+historical_end_year = 2024

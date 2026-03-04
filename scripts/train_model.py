@@ -24,6 +24,12 @@ from sklearn.metrics import (
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from scripts.build_features import FEATURE_COLS, TARGET_CLF, TARGET_REG  # noqa: E402
+from scripts.app_config import load_model_config  # noqa: E402
+
+_CFG = load_model_config()
+_SPLIT_CFG = _CFG["training"]["split"]
+_CLF_CFG = _CFG["training"]["classifier"]
+_REG_CFG = _CFG["training"]["regressor"]
 
 
 def train(data: pd.DataFrame):
@@ -52,13 +58,17 @@ def train(data: pd.DataFrame):
             f"{missing_features}. Rebuild features before training."
         )
 
-    train_df = data[data["season"] <= 2022].dropna(
+    train_end_season = int(_SPLIT_CFG["train_end_season"])
+    val_season = int(_SPLIT_CFG["val_season"])
+    test_season = int(_SPLIT_CFG["test_season"])
+
+    train_df = data[data["season"] <= train_end_season].dropna(
         subset=[TARGET_CLF, TARGET_REG]
     )
-    val_df = data[data["season"] == 2023].dropna(
+    val_df = data[data["season"] == val_season].dropna(
         subset=[TARGET_CLF, TARGET_REG]
     )
-    test_df = data[data["season"] == 2024].dropna(
+    test_df = data[data["season"] == test_season].dropna(
         subset=[TARGET_CLF, TARGET_REG]
     )
 
@@ -80,28 +90,30 @@ def train(data: pd.DataFrame):
 
     # ── Classification model (winner prediction) ──────────────────────────────
     clf = lgb.LGBMClassifier(
-        n_estimators=500,
-        learning_rate=0.03,
-        max_depth=5,
-        num_leaves=31,
-        subsample=0.8,
-        colsample_bytree=0.8,
-        min_child_samples=20,
-        verbose=-1,
+        n_estimators=int(_CLF_CFG["n_estimators"]),
+        learning_rate=float(_CLF_CFG["learning_rate"]),
+        max_depth=int(_CLF_CFG["max_depth"]),
+        num_leaves=int(_CLF_CFG["num_leaves"]),
+        subsample=float(_CLF_CFG["subsample"]),
+        colsample_bytree=float(_CLF_CFG["colsample_bytree"]),
+        min_child_samples=int(_CLF_CFG["min_child_samples"]),
+        random_state=int(_CLF_CFG["random_state"]),
+        verbose=int(_CLF_CFG["verbose"]),
     )
     eval_set_clf = [(X_val, y_clf_val)] if not X_val.empty else None
     clf.fit(X_train, y_clf_train, eval_set=eval_set_clf)
 
     # ── Regression model (margin prediction) ──────────────────────────────────
     reg = lgb.LGBMRegressor(
-        n_estimators=500,
-        learning_rate=0.03,
-        max_depth=5,
-        num_leaves=31,
-        subsample=0.8,
-        colsample_bytree=0.8,
-        min_child_samples=20,
-        verbose=-1,
+        n_estimators=int(_REG_CFG["n_estimators"]),
+        learning_rate=float(_REG_CFG["learning_rate"]),
+        max_depth=int(_REG_CFG["max_depth"]),
+        num_leaves=int(_REG_CFG["num_leaves"]),
+        subsample=float(_REG_CFG["subsample"]),
+        colsample_bytree=float(_REG_CFG["colsample_bytree"]),
+        min_child_samples=int(_REG_CFG["min_child_samples"]),
+        random_state=int(_REG_CFG["random_state"]),
+        verbose=int(_REG_CFG["verbose"]),
     )
     eval_set_reg = [(X_val, y_reg_val)] if not X_val.empty else None
     reg.fit(X_train, y_reg_train, eval_set=eval_set_reg)

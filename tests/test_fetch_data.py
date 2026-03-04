@@ -13,6 +13,8 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from scripts.fetch_data import (
     BASE_URL,
+    REQUEST_TIMEOUT,
+    USER_AGENT,
     fetch_current_season,
     fetch_games,
     fetch_historical,
@@ -103,8 +105,8 @@ class TestFetchGames:
         mock_get.assert_called_once_with(
             BASE_URL,
             params={"q": "games", "year": 2022},
-            timeout=30,
-            headers={"User-Agent": "AFL Tipping Model (geoffmatheson@gmail.com)"},
+            timeout=REQUEST_TIMEOUT,
+            headers={"User-Agent": USER_AGENT},
         )
 
     def test_uses_cached_season_data_when_available(self):

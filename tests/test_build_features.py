@@ -11,7 +11,10 @@ import pytest
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from scripts.build_features import (
+    ELO_HOME_ADV,
+    ELO_K,
     ELO_START,
+    ELO_SEASON_REVERSION,
     FEATURE_COLS,
     TARGET_CLF,
     TARGET_REG,
@@ -272,6 +275,35 @@ class TestBuildFeatures:
         assert first["away_elo_pre"] == pytest.approx(ELO_START)
         # Home-advantage term means baseline expected home win is > 0.5.
         assert first["elo_expected_home_win"] > 0.5
+
+    def test_elo_reverts_toward_mean_at_new_season_boundary(self):
+        """A new season should pull prior Elo ratings back toward the mean."""
+        games = pd.DataFrame([
+            {
+                "id": 1, "round": 1, "season": 2023, "year": 2023,
+                "venue": "MCG", "hteam": "A", "ateam": "B",
+                "hscore": 100, "ascore": 50,
+                "date": "2023-03-16 19:30:00", "complete": 100,
+            },
+            {
+                "id": 2, "round": 1, "season": 2024, "year": 2024,
+                "venue": "MCG", "hteam": "A", "ateam": "B",
+                "hscore": 80, "ascore": 70,
+                "date": "2024-03-16 19:30:00", "complete": 100,
+            },
+        ])
+        df = build_features(games)
+        second = df[df["match_id"] == 2].iloc[0]
+
+        expected_home_prob = 1.0 / (
+            1.0 + 10.0 ** ((ELO_START - (ELO_START + ELO_HOME_ADV)) / 400.0)
+        )
+        expected_home_no_reversion = ELO_START + ELO_K * (1.0 - expected_home_prob)
+        expected_home_with_reversion = ELO_START + (
+            expected_home_no_reversion - ELO_START
+        ) * (1.0 - ELO_SEASON_REVERSION)
+
+        assert second["home_elo_pre"] == pytest.approx(expected_home_with_reversion)
 
 
 # ---------------------------------------------------------------------------

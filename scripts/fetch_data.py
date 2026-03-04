@@ -11,7 +11,14 @@ import os
 import pandas as pd
 import requests
 
-BASE_URL = "https://api.squiggle.com.au/"
+from scripts.app_config import load_model_config
+
+_CFG = load_model_config()
+BASE_URL = _CFG["data"]["base_url"]
+REQUEST_TIMEOUT = int(_CFG["data"]["request_timeout"])
+USER_AGENT = _CFG["data"]["user_agent"]
+DEFAULT_START_YEAR = int(_CFG["pipeline"]["historical_start_year"])
+DEFAULT_END_YEAR = int(_CFG["pipeline"]["historical_end_year"])
 HISTORICAL_GAMES_PATH = "data/historical_games.csv"
 
 
@@ -51,7 +58,12 @@ def fetch_games(season: int, force: bool = False) -> pd.DataFrame:
                 return cached.reset_index(drop=True)
 
     params = {"q": "games", "year": season}
-    response = requests.get(BASE_URL, params=params, timeout=30, headers={"User-Agent": "AFL Tipping Model (geoffmatheson@gmail.com)"})
+    response = requests.get(
+        BASE_URL,
+        params=params,
+        timeout=REQUEST_TIMEOUT,
+        headers={"User-Agent": USER_AGENT},
+    )
     response.raise_for_status()
     games = response.json().get("games", [])
     df = pd.DataFrame(games)
@@ -61,7 +73,9 @@ def fetch_games(season: int, force: bool = False) -> pd.DataFrame:
 
 
 def fetch_historical(
-    start_year: int = 2010, end_year: int = 2024, force: bool = False
+    start_year: int = DEFAULT_START_YEAR,
+    end_year: int = DEFAULT_END_YEAR,
+    force: bool = False,
 ) -> pd.DataFrame:
     """Fetch and combine game data for a range of AFL seasons.
 
@@ -109,7 +123,7 @@ def save_data(df: pd.DataFrame, path: str) -> None:
 
 
 if __name__ == "__main__":
-    print("Fetching historical AFL data (2010–2024)…")
+    print(f"Fetching historical AFL data ({DEFAULT_START_YEAR}–{DEFAULT_END_YEAR})…")
     historical = fetch_historical()
     save_data(historical, "data/historical_games.csv")
     print(f"Saved {len(historical)} games to data/historical_games.csv")
